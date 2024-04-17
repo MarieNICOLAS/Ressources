@@ -1,0 +1,149 @@
+######### ARCHITECTURE PROJET ########
+wp-content/
+    plugins/
+        wp-controller/
+            wp_controller.php   (Fichier principal du plugin)
+            php/
+                utils/
+                    wpabc_activate_plugin.php   (Fonctions utilitaires)
+                    wpabc_add_admin_menu_db.php 
+                    wpabc_db_version_page.php 
+                    wpabc_db_version.php 
+                    wpabc_gestion_form_version_db.php 
+                    wpabc_init_plugin.php 
+                    wpabc_migrate_db.php 
+                    global.php           (Variables globales)
+            
+                classes/
+                    wpabc-main.php       (Classe "Main")
+        
+        └── databases/
+            └── migrates/
+                ├── 001-migration.sql   (Fichier de migration 1)
+                ├── 002-migration.sql   (Fichier de migration 2)
+                └── ...                 (Autres fichiers de migration)
+
+
+
+
+
+1. Créer un nouveau wordpress 
+2. Créer un nouveau plugin : 
+    - Le nommer "wp_controller"
+    - Créer un fichier qui contiendra totes les variables globales (global.php)
+3. Gestionnaire de migration sql : 
+    - Créer une option WP contenant la version de la DB
+    - Crer les "callback" correspondantes permettant de faire migrer la DB 
+        - Lister les fichiers dans un dossier et les comparer avec la version de mon option
+        - Si la version est inférieur au nombre  de fichiers : exécuter les scripts manquant à l'installation et incrémenter l'option
+4. Ajouter un SPL Loader : 
+    - La documentation PHP
+        https://www.php.net/manual/fr/function.spl-autoload-register.php
+    -Utilisé "WPABC" comme namespace personnalisé
+
+5. La classe Main : 
+    - Créer une classe "WPABC\Main" à construire lors de l'initialisation des WordPress
+    (remplacer la classe Main par une "Dependency Injection" 
+    ( Composer est bien évidement interdit :))
+
+6. Gestionnaire des workers(plugin wp-worker):
+    - SQL : Créer des scripts pour ajouter les tables suivantes
+            nom: wpabc_workers
+            id   INT(11) PK NN AI,
+            name VARCHAR(127) NN,
+            url  TEXT(2048) NN,
+
+            UNIQUE (name)
+            => Créer un repository CRUD pour cette table
+            et 
+            
+            nom: wpabc_workers_credentials
+
+            id        INT(11) PK NN AI,
+            worker_id INT(11) FK NN (wpabc_workers.id),
+            username  VARCHAR(127) NN,
+            password  VARCHAR(127) NN,
+
+            UNIQUE (worker_id)
+
+            => Créer un repository CRUD pour cette table
+
+    - Services & UI : 
+        - Créer un nouveau service "router_service" qui centralisera la création des différentes pages du BO
+        (à construire dans le constructeur de ton Main)
+            - Créer un premier ensemble de page nommé "Orchestrator"
+                - (voir) add_menu_page(*)
+                - Créer la "callback" d'affichage correspondante
+                - Ne doit s'afficher qu'aux administrateurs
+                    => La page "Orchestrator" sera le tableau de bord des workers.
+                        Pour l'instant il listera les différents workers contenu en BDD
+                    => La page "Ajouter" doit contenir un formulaire (POST) vers lui même permettant d'ajouter nouveau "worker" et ses "credentials"
+            - Créer une sous page nommé "Ajouter" 
+                - (voir) add_submenu_page(*)
+                - Créer la "callback" d'affichage correspondante
+                - Ne doit s'afficher qu'aux administrateurs
+                => La page "Orchestrator" sera le tableau de bord des workers.
+                        Pour l'instant il listera les différents workers contenu en BDD
+                => La page "Ajouter" doit contenir un formulaire (POST) vers lui même permettant d'ajouter nouveau "worker" et ses "credentials"
+            
+        - Créer un nouveau service "worker_service"
+        (à construire dans le constructeur de ton Main)
+            - Y ajouter le code fonctionnel consommé par les "templates"
+                -Ajouter un jeu worker/credential
+                    => La page "Ajouter" doit contenir un formulaire (POST) vers lui même permettant d'ajouter nouveau "worker" et ses "credentials"
+
+                - Supprimer un jeu worker/credential :
+                    => La page "Orchestrator" sera le tableau de bord des workers.
+                        Pour l'instant il listera les différents workers contenu en BDD
+                    Pense à faire une alerte pour confirmer une suppression ou une modification
+            
+                - Modifier un jeu worker/credential
+                    => La page "Orchestrator" sera le tableau de bord des workers.
+                        Pour l'instant il listera les différents workers contenu en BDD
+                    -Ne pas afficher le mot de passe actuel dans le formulaire de modification
+                    -Pense à faire une alerte pour confirmer une sup
+
+7. Consommé un Worker (1/2) : 
+    - SQL : 
+        - Créer des scripts pour ajouter les tables suivantes
+            - nom: wpabc_workers_credentials_cookies
+
+                id                   INT(11) PK NN AI,
+                worker_credential_id INT(11) FK NN (wpabc_workers_credentials.id),
+                created_at           TIMESTAMP NN D CURRENT_TIMESTAMP,
+                expire_at            TIMESTAMP NN,
+
+                UNIQUE (worker_credential_id)
+            
+            -nom: wpabc_workers_details
+
+                id                INT(11) PK NN AI,
+                worker_id         INT(11) FK (wpabc_workers.id),
+                updated_at        TIMESTAMP NN,
+                wp_version        VARCHAR(16) NN,
+                wp_lang           VARCHAR(12) NN,
+                wp_status         VARCHAR(64) NN,
+                db_version        VARCHAR(16) NN,
+                php_version       VARCHAR(16) NN,
+                wp_weight         DOUBLE NN,
+                wp_disk_usage     DOUBLE NN,
+                disk_free_space   DOUBLE NN,
+
+                UNIQUE (worker_id)
+            
+                =>nom: wpabc_workers_updates
+
+                    id                INT(11) PK NN AI,
+                    worker_id         INT(11) FK (wpabc_workers.id),
+                    wp_version        VARCHAR(16) NN,
+                    php_version       VARCHAR(16) NN,
+
+                    UNIQUE (worker_id, wp_version) 
+            
+            => Créer un repository CRUD pour chacune des tables
+    - Services
+        - Créer un nouveau service "ajax_helper" (à construire dans le constructeur de ton Main)
+            - Faire un "helper" pour les requêtes GET
+            - Faire un "helper" pour les requêtes POST
+                => Ces fonctions doivent "parser" les réponses (JSON) en objet ou tableau
+            -Créer un nouveau service "worker_api"(à construire dans le constructeur de ton Main)
